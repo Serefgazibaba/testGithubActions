@@ -1,0 +1,35 @@
+# Dockerfile with Build Arguments and Environment Variables
+# Use case: Different configurations for dev/staging/prod
+
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Build arguments (set during build time)
+ARG NODE_ENV=production
+ARG API_URL=https://api.example.com
+
+# Environment variables (available at runtime)
+ENV NODE_ENV=${NODE_ENV}
+ENV API_URL=${API_URL}
+ENV PORT=3000
+
+COPY package*.json ./
+
+# Install different dependencies based on NODE_ENV
+RUN if [ "$NODE_ENV" = "production" ]; then \
+      npm ci --only=production; \
+    else \
+      npm ci; \
+    fi
+
+COPY . .
+
+EXPOSE ${PORT}
+
+CMD ["node", "server.js"]
+
+# Usage:
+# docker build -t myapp:dev --build-arg NODE_ENV=development .
+# docker build -t myapp:prod --build-arg NODE_ENV=production --build-arg API_URL=https://prod.api.com .
+# docker run -e PORT=8080 myapp:prod

@@ -1,0 +1,23 @@
+# Example: Using ENTRYPOINT + CMD together (Best Practice!)
+# Fixed executable with default arguments
+
+FROM node:18-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+
+# ENTRYPOINT: The main executable (always runs)
+ENTRYPOINT ["node"]
+
+# CMD: Default arguments (can be overridden)
+CMD ["server.js"]
+
+# Usage:
+# docker run myapp                    → runs: node server.js
+# docker run myapp worker.js          → runs: node worker.js
+# docker run myapp app.js --debug     → runs: node app.js --debug
+# docker run myapp --version          → runs: node --version

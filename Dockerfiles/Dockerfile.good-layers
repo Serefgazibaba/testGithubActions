@@ -1,0 +1,28 @@
+# GOOD EXAMPLE: Optimized Layer Caching
+# Benefit: Only rebuilds what changed!
+# Build time after code change: 3-5 seconds! 🚀
+
+FROM node:18-alpine
+
+WORKDIR /app
+
+# ✅ GOOD: Copy package files FIRST (changes rarely)
+COPY package*.json ./
+
+# ✅ Install dependencies
+# This layer is CACHED unless package.json changes
+RUN npm install
+
+# ✅ GOOD: Copy application code LAST (changes frequently)
+# When you modify code, only this layer rebuilds
+COPY . .
+
+EXPOSE 3000
+
+CMD ["node", "index.js"]
+
+# Why this is GOOD:
+# - You change app.js → Only COPY . . rebuilds → 3 seconds! ✅
+# - You change README.md → Only COPY . . rebuilds → 3 seconds! ✅
+# - package.json unchanged → npm install uses cache → Super fast! ✅
+# - package.json changed → npm install runs (necessary) → Still optimized!

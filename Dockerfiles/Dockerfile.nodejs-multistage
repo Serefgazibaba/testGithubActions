@@ -1,0 +1,55 @@
+# Multi-Stage Build Example
+# Use case: Build TypeScript apps, separate build and runtime
+# Benefit: Final image is MUCH smaller (no TypeScript compiler, no dev dependencies!)
+
+# ==========================================
+# Stage 1: BUILD (includes build tools)
+# ==========================================
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install ALL dependencies (including dev dependencies needed for build)
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Build TypeScript → JavaScript
+RUN npm run build
+
+# At this point we have:
+# - node_modules (including dev dependencies) - BIG!
+# - src/ (TypeScript source) - Not needed in production
+# - dist/ (Built JavaScript) - This is what we want!
+
+# ==========================================
+# Stage 2: PRODUCTION (minimal runtime)
+# ==========================================
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install ONLY production dependencies (no TypeScript, no build tools!)
+RUN npm ci --only=production
+
+# Copy ONLY the built files from Stage 1 (not source code!)
+COPY --from=builder /app/dist ./dist
+
+# Don't run as root (security best practice)
+USER node
+
+EXPOSE 3000
+
+CMD ["node", "dist/server.js"]
+
+# Result:
+# Stage 1 (builder): ~500MB (we throw this away!)
+# Stage 2 (final):   ~150MB (this is what gets deployed!)
+# We saved 350MB and improved security!

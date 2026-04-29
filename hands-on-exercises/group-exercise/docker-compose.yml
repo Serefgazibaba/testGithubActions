@@ -1,0 +1,79 @@
+# Final Docker Compose Configuration
+# Instructor will update this with actual Docker Hub usernames from each group
+
+version: '3.8'
+
+services:
+  # Group 1: Frontend (Nginx + Static HTML)
+  frontend:
+    image: <GROUP1-DOCKERHUB-USERNAME>/ecommerce-frontend:v1.0
+    container_name: ecommerce-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - product-service
+      - cart-service
+      - auth-service
+    networks:
+      - ecommerce-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Group 2: Product Catalog Service (Node.js API)
+  product-service:
+    image: <GROUP2-DOCKERHUB-USERNAME>/ecommerce-products:v1.0
+    container_name: product-service
+    expose:
+      - "3001"
+    networks:
+      - ecommerce-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Group 3: Shopping Cart Service (Node.js API)
+  cart-service:
+    image: <GROUP3-DOCKERHUB-USERNAME>/ecommerce-cart:v1.0
+    container_name: cart-service
+    expose:
+      - "3002"
+    networks:
+      - ecommerce-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Group 4: Authentication Service (Node.js API)
+  auth-service:
+    image: <GROUP4-DOCKERHUB-USERNAME>/ecommerce-auth:v1.0
+    container_name: auth-service
+    expose:
+      - "3003"
+    networks:
+      - ecommerce-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  ecommerce-net:
+    driver: bridge
+    name: ecommerce-network
+
+# Uncomment below to add volumes if groups implement database persistence
+# volumes:
+#   postgres-data:
+#   redis-data:

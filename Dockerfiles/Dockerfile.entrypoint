@@ -1,0 +1,20 @@
+# Example: Using ENTRYPOINT only
+# The executable is fixed, arguments can be added
+
+FROM node:18-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+
+# ENTRYPOINT defines the fixed executable
+ENTRYPOINT ["node"]
+
+# Usage:
+# docker run myapp server.js          → runs: node server.js
+# docker run myapp worker.js          → runs: node worker.js
+# docker run myapp --version          → runs: node --version
+# docker run myapp echo "Hello"       → ERROR: node echo "Hello" (invalid!)

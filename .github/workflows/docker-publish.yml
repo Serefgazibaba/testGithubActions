@@ -1,0 +1,165 @@
+name: Docker CI/CD Pipeline
+
+# When will the pipeline run?
+on:
+  push:
+    branches: 
+      - main
+      - develop
+    tags:
+      - 'v*'  # Version tags like v1.0.0, v2.1.3
+  pull_request:
+    branches: 
+      - main
+
+# Environment variables (available in all jobs)
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  EXAMPLE_PATH: examples/docker-cicd-github-actions
+
+jobs:
+  # Job 1: Build and Test
+  build-and-test:
+    name: Build Docker Image & Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: 🏗️ Build Docker image
+        run: |
+          docker build \
+            --build-arg APP_VERSION=${{ github.sha }} \
+            --build-arg GITHUB_SHA=${{ github.sha }} \
+            -t test-image \
+            ./${{ env.EXAMPLE_PATH }}
+      
+      - name: 🧪 Run tests in container
+        run: |
+          echo "🧪 Running tests in container..."
+          docker run --rm test-image npm test
+      
+      - name: 🔍 Health check test
+        run: |
+          echo "🔍 Running container health check..."
+          docker run -d --name test-container -p 3000:3000 test-image
+          sleep 5
+          
+          # Health endpoint check
+          curl -f http://localhost:3000/health || exit 1
+          
+          # Main endpoint check
+          curl -f http://localhost:3000/ || exit 1
+          
+          docker stop test-container
+          docker rm test-container
+          
+          echo "✅ Health check successful!"
+      
+      - name: 📊 Show image size
+        run: |
+          echo "📦 Docker image information:"
+          docker images test-image --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}"
+
+  # Job 2: Push to GitHub Container Registry
+  # Only runs on push to main branch
+  push-to-registry:
+    name: Push to GitHub Container Registry
+    needs: build-and-test  # Run only if tests pass
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    
+    permissions:
+      contents: read
+      packages: write  # Required to push to GitHub Container Registry
+    
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: 🔐 Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}  # Automatically provided by GitHub
+      
+      - name: 📝 Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # Branch name
+            type=ref,event=branch
+            # Tag name
+            type=ref,event=tag
+            # Semantic versioning (v1.2.3 -> 1.2.3, 1.2, 1)
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            # Git commit SHA (sha-abc1234)
+            type=sha,prefix=sha-
+            # Latest tag (only for main branch)
+            type=raw,value=latest,enable={{is_default_branch}}
+      
+      - name: 🏗️ Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ env.EXAMPLE_PATH }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            APP_VERSION=${{ github.ref_name }}
+            GITHUB_SHA=${{ github.sha }}
+      
+      - name: 📝 Create deployment summary
+        run: |
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Docker image successfully built and pushed!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Image Details" >> $GITHUB_STEP_SUMMARY
+          echo "- **Registry:** \`${{ env.REGISTRY }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Repository:** \`${{ env.IMAGE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🏷️ Tags" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🎯 Pull Command" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+  # Job 3: Security Scan (Optional - advanced usage)
+  security-scan:
+    name: Security Vulnerability Scan
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: 🏗️ Build image for scanning
+        run: docker build -t scan-image ./${{ env.EXAMPLE_PATH }}
+      
+      - name: 🔒 Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'scan-image'
+          format: 'table'
+          exit-code: '0'  # 0 = report only, 1 = fail if vulnerabilities found
+          severity: 'CRITICAL,HIGH'
+      
+      - name: 📊 Scan summary
+        run: |
+          echo "🔒 Security scan completed!" >> $GITHUB_STEP_SUMMARY

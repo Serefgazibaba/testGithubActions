@@ -1,0 +1,24 @@
+# BAD EXAMPLE: Poor Layer Caching
+# Problem: Every code change rebuilds EVERYTHING including npm install!
+# Build time after code change: 2-3 minutes 😭
+
+FROM node:18-alpine
+
+WORKDIR /app
+
+# ❌ BAD: Copying everything first!
+# This means ANY file change (even a comment in code) will invalidate the cache
+COPY . .
+
+# ❌ This runs EVERY TIME because cache is already broken above
+# Even if package.json didn't change!
+RUN npm install
+
+EXPOSE 3000
+
+CMD ["node", "index.js"]
+
+# Why this is BAD:
+# - You change app.js → COPY . . changes → npm install runs again (120+ seconds!)
+# - You change README.md → COPY . . changes → npm install runs again (120+ seconds!)  
+# - You fix a typo → COPY . . changes → npm install runs again (120+ seconds!)
